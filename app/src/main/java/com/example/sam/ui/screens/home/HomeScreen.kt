@@ -3,6 +3,7 @@ package com.example.sam.ui.screens.home
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Button
@@ -12,10 +13,25 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+
+
+import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.sp
 
 @Composable
 fun HomeScreen(homeViewModel: HomeViewModel) {
@@ -27,6 +43,14 @@ fun HomeScreen(homeViewModel: HomeViewModel) {
     var componentWidth by remember { mutableStateOf(1f) }
     var componentHeight by remember { mutableStateOf(1f) }
 
+    // aktuellen Zoom merknen
+    var scale by remember { mutableFloatStateOf(1f) }
+    var offsetX by remember { mutableFloatStateOf(0f) }
+    var offsetY by remember { mutableFloatStateOf(0f) }
+    var size by remember { mutableStateOf(IntSize.Zero) } // Größe des Bildschirms
+
+    val appTurquoise = Color(0xFF374151)
+
     val context = LocalContext.current
 
     val galleryLauncher = rememberLauncherForActivityResult(
@@ -34,6 +58,10 @@ fun HomeScreen(homeViewModel: HomeViewModel) {
     ) { uri ->
         if (uri != null) {
             isProcessing = true
+            // wenn neues Bild geladen wird -> Zoom zurücksetzen
+            scale = 1f
+            offsetX = 0f
+            offsetY = 0f
             homeViewModel.onImageSelected(context, uri)
         }
     }
@@ -47,52 +75,108 @@ fun HomeScreen(homeViewModel: HomeViewModel) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(Color(0xFFF8F9FA), Color(0xFFE2E8F0))
+                )
+            )
+            .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Text(text = "SAM 2: Tippe auf einen Klettergriff!", modifier = Modifier.padding(bottom = 16.dp))
-
+        Text(
+            text = "SAM 2 Erkennung",
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold,
+            color = appTurquoise,
+            modifier = Modifier.padding(bottom = 4.dp, top = 8.dp)
+        )
+        Text(
+            text = "Tippe auf einen Griff zum Segmentieren",
+            fontSize = 14.sp,
+            color = Color.Gray,
+            modifier = Modifier.padding(bottom = 24.dp)
+        )
+        Spacer(modifier = Modifier.weight(0.3f))
         Box(
             modifier = Modifier
-                .weight(1f)
+                .aspectRatio(1f)
                 .fillMaxWidth()
-                .onGloballyPositioned { coordinates ->
-                    // Speichert die echte Größe der Display-Box ab
-                    componentWidth = coordinates.size.width.toFloat()
-                    componentHeight = coordinates.size.height.toFloat()
+                .shadow(elevation = 12.dp, shape = RoundedCornerShape(20.dp))
+                .background(Color.White)
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color.LightGray.copy(alpha = 0.2f))
+                .onSizeChanged{ size = it} // speichert Box Größe
+
+                // Zoom
+                .pointerInput(isImageReady) {
+                    if (isImageReady) {
+                        detectTransformGestures { _, pan, zoom, _ ->
+                            scale = (scale * zoom).coerceIn(1f, 5f)
+
+                            val maxOffset = (scale - 1) * size.width / 2
+                            offsetX = (offsetX + pan.x * scale).coerceIn(-maxOffset, maxOffset)
+                            offsetY = (offsetY + pan.y * scale).coerceIn(-maxOffset, maxOffset)
+                        }
+                    }
                 }
                 .pointerInput(isImageReady) {
                     if (isImageReady) {
-                        detectTapGestures { offset ->
-                            // Berechnet relative Klickposition (0.0 bis 1.0)
-                            val normX = offset.x / componentWidth
-                            val normY = offset.y / componentHeight
-                            homeViewModel.onTrackTapped(normX, normY)
+                        detectTapGestures { tapOffset ->
+                            // Umrechnung
+                            val centerX = size.width / 2f
+                            val centerY = size.height / 2f
+
+                            val xWithoutOffset = tapOffset.x - offsetX
+                            val yWithoutOffset = tapOffset.y - offsetY
+
+                            val originalX = centerX + (xWithoutOffset - centerX) / scale
+                            val originalY = centerY + (yWithoutOffset - centerY) / scale
+
+                            val normX = originalX / size.width.toFloat()
+                            val normY = originalY / size.height.toFloat()
+
+                            if (normX in 0f..1f && normY in 0f..1f) {
+                                homeViewModel.onTrackTapped(normX, normY)
+                            }
                         }
                     }
-                },
+                }
+            ,
             contentAlignment = Alignment.Center
         ) {
-            if (resultBitmap != null) {
+            if (isProcessing) {
+                CircularProgressIndicator(color = appTurquoise, modifier = Modifier.size(50.dp))
+            }
+            else if (resultBitmap != null) {
                 Image(
                     bitmap = resultBitmap!!.asImageBitmap(),
                     contentDescription = "Kletterwand",
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer(
+                            scaleX = scale,
+                            scaleY = scale,
+                            translationX = offsetX,
+                            translationY = offsetY
+                        )
                 )
             } else {
-                Text(text = "Wähle ein Bild aus, um zu starten.")
-            }
-
-            if (isProcessing) {
-                CircularProgressIndicator(modifier = Modifier.size(50.dp))
+                Text(text = "Kein Bild ausgewählt", color = Color.Gray)
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.weight(1f))
 
-        Button(onClick = { galleryLauncher.launch("image/*") }) {
-            Text(text = "Bild auswählen")
+        Button(
+            onClick = { galleryLauncher.launch("image/*") },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(50.dp),
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = appTurquoise)
+            ) {
+            Text(text = "Foto auswählen", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
         }
     }
 }

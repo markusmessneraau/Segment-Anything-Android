@@ -159,7 +159,7 @@ class SamLocalAnalyzer(private val context: Context) {
                         for (x in 0 until maskWidth) {
                             val index = y * maskWidth + x
                             if (index < masksFloats.size && masksFloats[index] > 0.0f) {
-                                maskBitmap.setPixel(x, y, Color.argb(160, 0, 255, 0)) // Klick-Ergebnis GRÜN einfärben!
+                                maskBitmap.setPixel(x, y, Color.argb(160, 0, 230, 230))
                             } else {
                                 maskBitmap.setPixel(x, y, Color.TRANSPARENT)
                             }
