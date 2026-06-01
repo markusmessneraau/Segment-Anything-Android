@@ -57,4 +57,8 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
+
+    // ONNX Runtime für das Ausführen von SAM direkt auf dem Handy
+    implementation(libs.onnxruntime.android)
+    //implementation(libs.opencv.android)
 }
