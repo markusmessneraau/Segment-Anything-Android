@@ -126,24 +126,34 @@ fun HomeScreen(homeViewModel: HomeViewModel) {
                 }
                 .pointerInput(isImageReady) {
                     if (isImageReady) {
-                        detectTapGestures { tapOffset ->
-                            // Umrechnung
-                            val centerX = size.width / 2f
-                            val centerY = size.height / 2f
+                        detectTapGestures(
+                            onTap = { tapOffset ->
+                                val centerX = size.width / 2f
+                                val centerY = size.height / 2f
+                                val originalX = centerX + (tapOffset.x - offsetX - centerX) / scale
+                                val originalY = centerY + (tapOffset.y - offsetY - centerY) / scale
+                                val normX = originalX / size.width.toFloat()
+                                val normY = originalY / size.height.toFloat()
 
-                            val xWithoutOffset = tapOffset.x - offsetX
-                            val yWithoutOffset = tapOffset.y - offsetY
+                                if (normX in 0f..1f && normY in 0f..1f) {
+                                    homeViewModel.onTrackTapped(normX, normY)
+                                }
+                            },
+                            // Fehler wegschneiden
+                            onLongPress = { tapOffset ->
+                                val centerX = size.width / 2f
+                                val centerY = size.height / 2f
+                                val originalX = centerX + (tapOffset.x - offsetX - centerX) / scale
+                                val originalY = centerY + (tapOffset.y - offsetY - centerY) / scale
+                                val normX = originalX / size.width.toFloat()
+                                val normY = originalY / size.height.toFloat()
 
-                            val originalX = centerX + (xWithoutOffset - centerX) / scale
-                            val originalY = centerY + (yWithoutOffset - centerY) / scale
-
-                            val normX = originalX / size.width.toFloat()
-                            val normY = originalY / size.height.toFloat()
-
-                            if (normX in 0f..1f && normY in 0f..1f) {
-                                homeViewModel.onTrackTapped(normX, normY)
+                                if (normX in 0f..1f && normY in 0f..1f) {
+                                    homeViewModel.onTrackLongPressed(normX, normY)
+                                }
                             }
-                        }
+                        )
+
                     }
                 }
             ,

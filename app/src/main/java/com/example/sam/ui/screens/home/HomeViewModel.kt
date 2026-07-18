@@ -101,4 +101,24 @@ class HomeViewModel(private val samRepository: SamRepository) : ViewModel() {
 
         }
     }
+
+    fun onTrackLongPressed(normX: Float, normY: Float) {
+        if (!_isImageReady.value) return
+
+        // aktiven Griff prüfen
+        val activeId = _activeHoldId.value ?: return
+        val currentHold = _holds.value.find { it.id == activeId } ?: return
+
+        val negativePoint = TapPoint(normX, normY, isPositive = false)
+
+        val updatedPoints = currentHold.points + negativePoint
+        val holdWithNewPoint = currentHold.copy(points = updatedPoints)
+
+        _holds.value = _holds.value.map { if (it.id == activeId) holdWithNewPoint else it }
+
+        samRepository.getHoldMask(holdWithNewPoint.points) { newMask ->
+            val finishedHold = holdWithNewPoint.copy(maskBitmap = newMask)
+            _holds.value = _holds.value.map { if (it.id == activeId) finishedHold else it }
+        }
+    }
 }
