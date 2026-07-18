@@ -2,6 +2,7 @@ package com.example.sam.data.repository
 
 import android.graphics.Bitmap
 import com.example.sam.data.analyzer.SamLocalAnalyzer
+import com.example.sam.data.model.TapPoint
 
 class SamRepository(private val samAnalyzer: SamLocalAnalyzer) {
 
@@ -9,7 +10,7 @@ class SamRepository(private val samAnalyzer: SamLocalAnalyzer) {
         samAnalyzer.prepareImage(bitmap, onReady)
     }
 
-    fun getMaskAtPoint(normX: Float, normY: Float, onResult: (Bitmap) -> Unit) {
-        samAnalyzer.segmentAtPoint(normX, normY, onResult)
+    fun getHoldMask(points: List<TapPoint>, onResult: (Bitmap) -> Unit) {
+        samAnalyzer.segmentHold(points, onResult)
     }
 }

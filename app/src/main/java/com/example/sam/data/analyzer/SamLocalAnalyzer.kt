@@ -7,6 +7,7 @@ import ai.onnxruntime.OnnxTensor
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import com.example.sam.data.model.TapPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -15,6 +16,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.nio.FloatBuffer
 import java.nio.IntBuffer
+
 
 class SamLocalAnalyzer(private val context: Context) {
 
@@ -116,20 +118,27 @@ class SamLocalAnalyzer(private val context: Context) {
     }
 
     //Bei jedem Fingertipp die Maske berechnen (Decoder)
-    fun segmentAtPoint(normX: Float, normY: Float, onResult: (Bitmap) -> Unit) {
+    fun segmentHold(pointsList: List<TapPoint>, onResult: (Bitmap) -> Unit) {
         val embed = imageEmbed ?: return
         val feat0 = highResFeats0 ?: return
         val feat1 = highResFeats1 ?: return
-        val baseBitmap = currentResizedBitmap ?: return
 
         CoroutineScope(Dispatchers.Default).launch {
             try {
-                // Koordinaten auf die Modellgröße (1024x1024) mappen
-                val points = floatArrayOf(normX * 1024f, normY * 1024f)
-                val labels = floatArrayOf(1f) // 1 = Klickpunkt einschließen
+                // Arrays für SAM aus pointsList bauen
+                val pointsArray = FloatArray(pointsList.size * 2)
+                val labelsArray = FloatArray(pointsList.size)
 
-                val coordsTensor = OnnxTensor.createTensor(ortEnv, FloatBuffer.wrap(points), longArrayOf(1, 1, 2))
-                val labelsTensor = OnnxTensor.createTensor(ortEnv, FloatBuffer.wrap(labels), longArrayOf(1, 1))
+                for (i in pointsList.indices) {
+                    pointsArray[i * 2] = pointsList[i].normX * 1024f
+                    pointsArray[i * 2 + 1] = pointsList[i].normY * 1024f
+                    // 1f für positiv, 0f für negativ
+                    labelsArray[i] = if (pointsList[i].isPositive) 1f else 0f
+                }
+                val numPoints = pointsList.size.toLong()
+                val coordsTensor = OnnxTensor.createTensor(ortEnv, FloatBuffer.wrap(pointsArray), longArrayOf(1, numPoints, 2))
+                val labelsTensor = OnnxTensor.createTensor(ortEnv, FloatBuffer.wrap(labelsArray), longArrayOf(1, numPoints))
+
                 val origSizeTensor = OnnxTensor.createTensor(ortEnv, IntBuffer.wrap(intArrayOf(1024, 1024)), longArrayOf(2))
                 val hasMaskTensor = OnnxTensor.createTensor(ortEnv, FloatBuffer.wrap(floatArrayOf(0f)), longArrayOf(1))
                 val dummyMask = OnnxTensor.createTensor(ortEnv, FloatBuffer.wrap(FloatArray(1 * 1 * 256 * 256)), longArrayOf(1, 1, 256, 256))
@@ -166,18 +175,12 @@ class SamLocalAnalyzer(private val context: Context) {
                         }
                     }
 
-                    val finalResult = Bitmap.createBitmap(1024, 1024, Bitmap.Config.ARGB_8888)
-                    val canvas = Canvas(finalResult)
-                    canvas.drawBitmap(baseBitmap, 0f, 0f, null)
-
+                    // Maske auf die Originalgröße (1024) hochskalieren
                     val scaledMask = Bitmap.createScaledBitmap(maskBitmap, 1024, 1024, true)
-                    canvas.drawBitmap(scaledMask, 0f, 0f, null)
-
                     maskBitmap.recycle()
-                    scaledMask.recycle()
 
-                    withContext(Dispatchers.Main) {
-                        onResult(finalResult)
+               withContext(Dispatchers.Main) {
+                        onResult(scaledMask) // nur transparente Maske zurückgeben
                     }
                 }
 

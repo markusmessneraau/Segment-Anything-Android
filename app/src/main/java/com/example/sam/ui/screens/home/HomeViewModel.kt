@@ -11,22 +11,33 @@ import com.example.sam.data.repository.SamRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import com.example.sam.data.model.ClimbingHold
+import com.example.sam.data.model.TapPoint
+
 
 class HomeViewModel(private val samRepository: SamRepository) : ViewModel() {
 
     private val _selectedImageUri = MutableStateFlow<Uri?>(null)
     val selectedImageUri: StateFlow<Uri?> = _selectedImageUri.asStateFlow()
 
-    private val _resultBitmap = MutableStateFlow<Bitmap?>(null)
-    val resultBitmap: StateFlow<Bitmap?> = _resultBitmap.asStateFlow()
-
     private val _isImageReady = MutableStateFlow(false)
     val isImageReady: StateFlow<Boolean> = _isImageReady.asStateFlow()
 
+    // speichert alle Griffe einer Spraywall
+    private val _holds = MutableStateFlow<List<ClimbingHold>>(emptyList())
+    val holds: StateFlow<List<ClimbingHold>> = _holds.asStateFlow()
+    private val _activeHoldId = MutableStateFlow<String?>(null)
+    val activeHoldId: StateFlow<String?> = _activeHoldId.asStateFlow()
+
+    private val _baseBitmap = MutableStateFlow<Bitmap?>(null)
+    val baseBitmap: StateFlow<Bitmap?> = _baseBitmap.asStateFlow()
+
     fun onImageSelected(context: Context, uri: Uri?) {
         _selectedImageUri.value = uri
-        _resultBitmap.value = null
         _isImageReady.value = false
+        _holds.value = emptyList()
+        _activeHoldId.value = null
+        _baseBitmap.value = null
 
         if (uri != null) {
             try {
@@ -43,7 +54,7 @@ class HomeViewModel(private val samRepository: SamRepository) : ViewModel() {
                 // Bild einlesen und Merkmale berechnen
                 samRepository.loadAndPrepare(argbBitmap) {
                     _isImageReady.value = true
-                    _resultBitmap.value = argbBitmap
+                    _baseBitmap.value = argbBitmap
                 }
 
             } catch (e: Exception) {
@@ -56,8 +67,38 @@ class HomeViewModel(private val samRepository: SamRepository) : ViewModel() {
     fun onTrackTapped(normX: Float, normY: Float) {
         if (!_isImageReady.value) return
 
-        samRepository.getMaskAtPoint(normX, normY) { processedBitmap ->
-            _resultBitmap.value = processedBitmap
+        // Werte auf Maskengröße (1024x1024) hochrechnen
+        val pixelX = (normX * 1024f).toInt().coerceIn(0, 1023)
+        val pixelY = (normY * 1024f).toInt().coerceIn(0, 1023)
+
+        // in allen fertigen Masken suchen, ob der angeklickte Pixel nicht durchsichtig ist
+        val clickedHold = _holds.value.find { hold ->
+            val bitmap = hold.maskBitmap
+            if (bitmap != null) {
+                val pixelColor = bitmap.getPixel(pixelX, pixelY)
+                android.graphics.Color.alpha(pixelColor) > 0
+            } else {
+                false
+            }
+        }
+
+        // bereits geklickter Griff neu angeklickt
+        if (clickedHold != null) {
+            _activeHoldId.value = clickedHold.id
+        } else {
+            val newPoint = TapPoint(normX, normY, isPositive = true)
+            val newHold = ClimbingHold(points = listOf(newPoint))
+
+            _activeHoldId.value = newHold.id
+            _holds.value += newHold
+
+            samRepository.getHoldMask(newHold.points) { maskBitmap ->
+                val updatedHold = newHold.copy(maskBitmap = maskBitmap)
+                _holds.value = _holds.value.map { hold ->
+                    if (hold.id == updatedHold.id) updatedHold else hold
+                }
+            }
+
         }
     }
 }

@@ -36,7 +36,11 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun HomeScreen(homeViewModel: HomeViewModel) {
     val selectedImageUri by homeViewModel.selectedImageUri.collectAsState()
-    val resultBitmap by homeViewModel.resultBitmap.collectAsState()
+
+    val baseBitmap by homeViewModel.baseBitmap.collectAsState()
+    val holds by homeViewModel.holds.collectAsState()
+    val activeHoldId by homeViewModel.activeHoldId.collectAsState()
+
     val isImageReady by homeViewModel.isImageReady.collectAsState()
 
     var isProcessing by remember { mutableStateOf(false) }
@@ -148,10 +152,9 @@ fun HomeScreen(homeViewModel: HomeViewModel) {
             if (isProcessing) {
                 CircularProgressIndicator(color = appTurquoise, modifier = Modifier.size(50.dp))
             }
-            else if (resultBitmap != null) {
-                Image(
-                    bitmap = resultBitmap!!.asImageBitmap(),
-                    contentDescription = "Kletterwand",
+            else if (baseBitmap != null) {
+               // Bilder werden übereinander gelegt
+                Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .graphicsLayer(
@@ -160,7 +163,31 @@ fun HomeScreen(homeViewModel: HomeViewModel) {
                             translationX = offsetX,
                             translationY = offsetY
                         )
-                )
+                ) {
+                    // unterstes Foto
+                    Image(
+                        bitmap = baseBitmap!!.asImageBitmap(),
+                        contentDescription = "Spraywall",
+                        modifier = Modifier.fillMaxSize()
+                    )
+
+                    // darüber alle Griffmasken
+                    holds.forEach { hold ->
+                        if (hold.maskBitmap != null) {
+
+                            val isActive = hold.id == activeHoldId
+
+                            val alphaValue = if (isActive) 1.0f else 0.4f
+
+                            Image(
+                                bitmap = hold.maskBitmap.asImageBitmap(),
+                                contentDescription = "Maske",
+                                modifier = Modifier.fillMaxSize(),
+                                alpha = alphaValue
+                            )
+                        }
+                    }
+                }
             } else {
                 Text(text = "Kein Bild ausgewählt", color = Color.Gray)
             }
