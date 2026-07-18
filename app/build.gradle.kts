@@ -61,4 +61,6 @@ dependencies {
     // ONNX Runtime für das Ausführen von SAM direkt auf dem Handy
     implementation(libs.onnxruntime.android)
     //implementation(libs.opencv.android)
+
+    implementation("androidx.compose.material:material-icons-extended")
 }

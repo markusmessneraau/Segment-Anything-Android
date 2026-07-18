@@ -33,6 +33,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.sp
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.foundation.shape.CircleShape
+
 @Composable
 fun HomeScreen(homeViewModel: HomeViewModel) {
     val selectedImageUri by homeViewModel.selectedImageUri.collectAsState()
@@ -197,6 +203,22 @@ fun HomeScreen(homeViewModel: HomeViewModel) {
                             )
                         }
                     }
+                    if (activeHoldId != null) {
+                        IconButton(
+                            onClick = { homeViewModel.deleteActiveHold() },
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(16.dp)
+                                .background(Color.Red.copy(alpha = 0.8f), shape = CircleShape)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Griff löschen",
+                                tint = Color.White
+                            )
+                        }
+                    }
+
                 }
             } else {
                 Text(text = "Kein Bild ausgewählt", color = Color.Gray)

@@ -121,4 +121,13 @@ class HomeViewModel(private val samRepository: SamRepository) : ViewModel() {
             _holds.value = _holds.value.map { if (it.id == activeId) finishedHold else it }
         }
     }
+
+    fun deleteActiveHold() {
+        val idToRemove = _activeHoldId.value ?: return
+
+        _holds.value = _holds.value.filter { it.id != idToRemove }
+
+        _activeHoldId.value = null
+    }
+
 }
