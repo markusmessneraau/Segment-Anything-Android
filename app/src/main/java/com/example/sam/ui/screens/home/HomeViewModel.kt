@@ -32,6 +32,17 @@ class HomeViewModel(private val samRepository: SamRepository) : ViewModel() {
     private val _baseBitmap = MutableStateFlow<Bitmap?>(null)
     val baseBitmap: StateFlow<Bitmap?> = _baseBitmap.asStateFlow()
 
+    private val _isRouteFinished = MutableStateFlow(false)
+    val isRouteFinished: StateFlow<Boolean> = _isRouteFinished.asStateFlow()
+
+    fun toggleRouteFinished(finished: Boolean) {
+        _isRouteFinished.value = finished
+        if (finished) {
+            _activeHoldId.value = null
+        }
+    }
+
+
     fun onImageSelected(context: Context, uri: Uri?) {
         resetState(uri)
         if (uri != null) {
@@ -97,14 +108,26 @@ class HomeViewModel(private val samRepository: SamRepository) : ViewModel() {
     }
 
     private fun decodeBitmapFromUri(context: Context, uri: Uri): Bitmap {
-        val bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        val originalBitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             val source = ImageDecoder.createSource(context.contentResolver, uri)
             ImageDecoder.decodeBitmap(source)
         } else {
             @Suppress("DEPRECATION")
             MediaStore.Images.Media.getBitmap(context.contentResolver, uri)
         }
-        return bitmap.copy(Bitmap.Config.ARGB_8888, true)
+        val softwareBitmap = originalBitmap.copy(Bitmap.Config.ARGB_8888, true)
+
+        // auf Quadrat zuschneiden
+        val size = Math.min(softwareBitmap.width, softwareBitmap.height)
+        val xOffset = (softwareBitmap.width - size) / 2
+        val yOffset = (softwareBitmap.height - size) / 2
+
+        val squareBitmap = Bitmap.createBitmap(softwareBitmap, xOffset, yOffset, size, size)
+
+        if (softwareBitmap != squareBitmap) {
+            softwareBitmap.recycle()
+        }
+        return squareBitmap.copy(Bitmap.Config.ARGB_8888, true)
     }
 
     private fun findHoldAtPosition(normX: Float, normY: Float): ClimbingHold? {

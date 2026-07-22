@@ -49,6 +49,8 @@ fun HomeScreen(homeViewModel: HomeViewModel) {
 
     val isImageReady by homeViewModel.isImageReady.collectAsState()
 
+    val isRouteFinished by homeViewModel.isRouteFinished.collectAsState()
+
     var isProcessing by remember { mutableStateOf(false) }
     var componentWidth by remember { mutableStateOf(1f) }
     var componentHeight by remember { mutableStateOf(1f) }
@@ -119,8 +121,8 @@ fun HomeScreen(homeViewModel: HomeViewModel) {
                 .onSizeChanged{ size = it} // speichert Box Größe
 
                 // Zoom
-                .pointerInput(isImageReady) {
-                    if (isImageReady) {
+                .pointerInput(isImageReady, isRouteFinished) {
+                    if (isImageReady && !isRouteFinished) {
                         detectTransformGestures { _, pan, zoom, _ ->
                             scale = (scale * zoom).coerceIn(1f, 5f)
 
@@ -130,8 +132,8 @@ fun HomeScreen(homeViewModel: HomeViewModel) {
                         }
                     }
                 }
-                .pointerInput(isImageReady) {
-                    if (isImageReady) {
+                .pointerInput(isImageReady, isRouteFinished) {
+                    if (isImageReady && !isRouteFinished) {
                         detectTapGestures(
                             onTap = { tapOffset ->
                                 val centerX = size.width / 2f
@@ -187,23 +189,41 @@ fun HomeScreen(homeViewModel: HomeViewModel) {
                         modifier = Modifier.fillMaxSize()
                     )
 
+                    if (isRouteFinished) {
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .background(Color.Black.copy(alpha = 0.6f))
+                        )
+                    }
+
                     // darüber alle Griffmasken
                     holds.forEach { hold ->
                         if (hold.maskBitmap != null) {
 
                             val isActive = hold.id == activeHoldId
 
-                            val alphaValue = if (isActive) 1.0f else 0.4f
+                            val colorFilter = if (isRouteFinished) {
+                                null
+                            } else {
+                                // Bearbeitungsmodus
+                                val tintColor = if (isActive) Color(0xCC00E6E6) else Color(0x6600E6E6)
+                                androidx.compose.ui.graphics.ColorFilter.tint(
+                                    color = tintColor,
+                                    blendMode = androidx.compose.ui.graphics.BlendMode.SrcIn
+                                )
+                            }
+
 
                             Image(
                                 bitmap = hold.maskBitmap.asImageBitmap(),
                                 contentDescription = "Maske",
                                 modifier = Modifier.fillMaxSize(),
-                                alpha = alphaValue
+                                colorFilter = colorFilter
                             )
                         }
                     }
-                    if (activeHoldId != null) {
+                    if (activeHoldId != null && !isRouteFinished) {
                         IconButton(
                             onClick = { homeViewModel.deleteActiveHold() },
                             modifier = Modifier
@@ -226,6 +246,25 @@ fun HomeScreen(homeViewModel: HomeViewModel) {
         }
 
         Spacer(modifier = Modifier.weight(1f))
+
+        Button(
+            onClick = { homeViewModel.toggleRouteFinished(!isRouteFinished) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(50.dp),
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = if (isRouteFinished) Color(0xFF4B5563) else appTurquoise
+            )
+        ) {
+            Text(
+                text = if (isRouteFinished) "Route bearbeiten" else "Route fertigstellen",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+
 
         Button(
             onClick = { galleryLauncher.launch("image/*") },

@@ -229,7 +229,7 @@ class SamLocalAnalyzer(private val context: Context) {
 
         val pixelsArray = IntArray(totalPixels)
         var coloredPixels = 0
-        val maskColor = Color.argb(160, 0, 230, 230)
+        val maskColor = Color.WHITE
 
         for (i in 0 until totalPixels) {
             if (i < masksFloats.size && masksFloats[i] > 0.0f) {
@@ -255,8 +255,32 @@ class SamLocalAnalyzer(private val context: Context) {
         if (scaledMask !== maskBitmap) {
             maskBitmap.recycle()
         }
+        val finalCroppedBitmap = Bitmap.createBitmap(1024, 1024, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(finalCroppedBitmap)
+        val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG or android.graphics.Paint.FILTER_BITMAP_FLAG)
 
-        return scaledMask
+        paint.maskFilter = android.graphics.BlurMaskFilter(2f, android.graphics.BlurMaskFilter.Blur.NORMAL)
+        canvas.drawBitmap(scaledMask, 0f, 0f, paint)
+
+        paint.maskFilter = null
+        paint.xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.SRC_IN)
+        currentResizedBitmap?.let { originalFoto ->
+            canvas.drawBitmap(originalFoto, 0f, 0f, paint)
+        }
+        val alphaMask = scaledMask.extractAlpha()
+        val outlinePaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.WHITE
+            maskFilter =
+                android.graphics.BlurMaskFilter(4f, android.graphics.BlurMaskFilter.Blur.SOLID)
+            xfermode =
+                android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.DST_OVER)
+        }
+        canvas.drawBitmap(alphaMask, 0f, 0f, outlinePaint)
+
+        scaledMask.recycle()
+        alphaMask.recycle()
+
+        return finalCroppedBitmap
     }
 
     private fun closeTensors(vararg tensors: OnnxTensor) {
