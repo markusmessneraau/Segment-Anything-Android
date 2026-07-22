@@ -63,61 +63,81 @@ class SamLocalAnalyzer(private val context: Context) {
         return cacheFile
     }
 
-    // Bild laden und EINMALIG analysieren (Encoder)
+    // Bild laden und einmalig analysieren
     fun prepareImage(bitmap: Bitmap, onReady: () -> Unit) {
         if (encoderSession == null) return
 
-        CoroutineScope(Dispatchers.Default).launch { //Im eigene Thread
+        CoroutineScope(Dispatchers.Default).launch { //Im eigenen Thread
             try {
                 println("SAM 2: Starte Bild-Analyse im Hintergrund...")
                 val targetSize = 1024
-                currentResizedBitmap = Bitmap.createScaledBitmap(bitmap, targetSize, targetSize, true)
+                currentResizedBitmap =
+                    Bitmap.createScaledBitmap(bitmap, targetSize, targetSize, true)
 
-                val floatArray = FloatArray(3 * targetSize * targetSize)
-                val pixels = IntArray(targetSize * targetSize)
-                currentResizedBitmap!!.getPixels(pixels, 0, targetSize, 0, 0, targetSize, targetSize)
-
-                for (i in pixels.indices) {
-                    val pixel = pixels[i]
-                    floatArray[i] = (pixel shr 16 and 0xFF) / 255.0f
-                    floatArray[targetSize * targetSize + i] = (pixel shr 8 and 0xFF) / 255.0f
-                    floatArray[2 * targetSize * targetSize + i] = (pixel and 0xFF) / 255.0f
-                }
-
-                val inputBuffer = FloatBuffer.wrap(floatArray)
+                val inputBuffer = convertBitmapToFloatBuffer(currentResizedBitmap!!, targetSize)
                 val inputShape = longArrayOf(1, 3, targetSize.toLong(), targetSize.toLong())
-
                 val inputName = encoderSession?.inputNames?.iterator()?.next() ?: "image"
 
-                // alte merkmale schlißen, falls ein neues Bild geladen wird
-                imageEmbed?.close()
-                highResFeats0?.close()
-                highResFeats1?.close()
+                closeOldFeatures()
 
-                val encoderOutputs = encoderSession?.run(mapOf(inputName to OnnxTensor.createTensor(ortEnv, inputBuffer, inputShape)))
+                val encoderOutputs = encoderSession?.run(
+                    mapOf(
+                        inputName to OnnxTensor.createTensor(
+                            ortEnv,
+                            inputBuffer,
+                            inputShape
+                        )
+                    )
+                )
 
-                if (encoderOutputs != null) {
-                    for (output in encoderOutputs) {
-                        val tensor = output.value as OnnxTensor
-                        val shape = tensor.info.shape
-                        if (shape.size == 4) {
-                            when (shape[1].toInt()) {
-                                256 -> imageEmbed = tensor
-                                32 -> highResFeats0 = tensor
-                                64 -> highResFeats1 = tensor
-                            }
-                        }
-                    }
-                    println("SAM 2: Encoder fertig! Bildmerkmale im Speicher gesichert. ")
-                    withContext(Dispatchers.Main) { onReady() }
-                }
+                extractAndSaveFeatures(encoderOutputs)
+
+                println("SAM 2: Encoder fertig! Bildmerkmale im Speicher gesichert. ")
+                withContext(Dispatchers.Main) { onReady() }
+
             } catch (e: Exception) {
                 e.printStackTrace()
             }
         }
     }
 
-    //Bei jedem Fingertipp die Maske berechnen (Decoder)
+    private fun convertBitmapToFloatBuffer(bitmap: Bitmap, targetSize: Int): FloatBuffer {
+        val floatArray = FloatArray(3 * targetSize * targetSize)
+        val pixels = IntArray(targetSize * targetSize)
+        bitmap.getPixels(pixels, 0, targetSize, 0, 0, targetSize, targetSize)
+
+        for (i in pixels.indices) {
+            val pixel = pixels[i]
+            floatArray[i] = (pixel shr 16 and 0xFF) / 255.0f
+            floatArray[targetSize * targetSize + i] = (pixel shr 8 and 0xFF) / 255.0f
+            floatArray[2 * targetSize * targetSize + i] = (pixel and 0xFF) / 255.0f
+        }
+        return FloatBuffer.wrap(floatArray)
+    }
+
+    private fun closeOldFeatures() {
+        imageEmbed?.close()
+        highResFeats0?.close()
+        highResFeats1?.close()
+    }
+
+    private fun extractAndSaveFeatures(encoderOutputs: OrtSession.Result?) {
+        if (encoderOutputs != null) {
+            for (output in encoderOutputs) {
+                val tensor = output.value as OnnxTensor
+                val shape = tensor.info.shape
+                if (shape.size == 4) {
+                    when (shape[1].toInt()) {
+                        256 -> imageEmbed = tensor
+                        32 -> highResFeats0 = tensor
+                        64 -> highResFeats1 = tensor
+                    }
+                }
+            }
+        }
+    }
+
+    //Bei jedem Tipp Maske berechnen
     fun segmentHold(pointsList: List<TapPoint>, onResult: (Bitmap?) -> Unit) {
         val embed = imageEmbed ?: return
         val feat0 = highResFeats0 ?: return
@@ -125,23 +145,26 @@ class SamLocalAnalyzer(private val context: Context) {
 
         CoroutineScope(Dispatchers.Default).launch {
             try {
-                // Arrays für SAM aus pointsList bauen
-                val pointsArray = FloatArray(pointsList.size * 2)
-                val labelsArray = FloatArray(pointsList.size)
-
-                for (i in pointsList.indices) {
-                    pointsArray[i * 2] = pointsList[i].normX * 1024f
-                    pointsArray[i * 2 + 1] = pointsList[i].normY * 1024f
-                    // 1f für positiv, 0f für negativ
-                    labelsArray[i] = if (pointsList[i].isPositive) 1f else 0f
-                }
                 val numPoints = pointsList.size.toLong()
-                val coordsTensor = OnnxTensor.createTensor(ortEnv, FloatBuffer.wrap(pointsArray), longArrayOf(1, numPoints, 2))
-                val labelsTensor = OnnxTensor.createTensor(ortEnv, FloatBuffer.wrap(labelsArray), longArrayOf(1, numPoints))
 
-                val origSizeTensor = OnnxTensor.createTensor(ortEnv, IntBuffer.wrap(intArrayOf(1024, 1024)), longArrayOf(2))
-                val hasMaskTensor = OnnxTensor.createTensor(ortEnv, FloatBuffer.wrap(floatArrayOf(0f)), longArrayOf(1))
-                val dummyMask = OnnxTensor.createTensor(ortEnv, FloatBuffer.wrap(FloatArray(1 * 1 * 256 * 256)), longArrayOf(1, 1, 256, 256))
+                val coordsTensor = createCoordsTensor(pointsList, numPoints)
+                val labelsTensor = createLabelsTensor(pointsList, numPoints)
+
+                val origSizeTensor = OnnxTensor.createTensor(
+                    ortEnv,
+                    IntBuffer.wrap(intArrayOf(1024, 1024)),
+                    longArrayOf(2)
+                )
+                val hasMaskTensor = OnnxTensor.createTensor(
+                    ortEnv,
+                    FloatBuffer.wrap(floatArrayOf(0f)),
+                    longArrayOf(1)
+                )
+                val dummyMask = OnnxTensor.createTensor(
+                    ortEnv,
+                    FloatBuffer.wrap(FloatArray(1 * 1 * 256 * 256)),
+                    longArrayOf(1, 1, 256, 256)
+                )
 
                 val decoderInputs = mapOf(
                     "image_embed" to embed,
@@ -156,54 +179,91 @@ class SamLocalAnalyzer(private val context: Context) {
 
                 decoderSession?.run(decoderInputs).use { decoderOutputs ->
                     val masksTensor = decoderOutputs?.get(0) as OnnxTensor
-                    val masksFloats = masksTensor.floatBuffer.array()
 
-                    val maskShape = masksTensor.info.shape
-                    val maskHeight = maskShape[maskShape.size - 2].toInt()
-                    val maskWidth = maskShape[maskShape.size - 1].toInt()
+                    // Tensor auslesen, Pixel zeichnen & Maske prüfen
+                    val resultMask = processMaskTensor(masksTensor)
 
-                    val maskBitmap = Bitmap.createBitmap(maskWidth, maskHeight, Bitmap.Config.ARGB_8888)
-
-                    var coloredPixels = 0
-                    val totalPixels = maskWidth * maskHeight
-
-                    for (y in 0 until maskHeight) {
-                        for (x in 0 until maskWidth) {
-                            val index = y * maskWidth + x
-                            if (index < masksFloats.size && masksFloats[index] > 0.0f) {
-                                maskBitmap.setPixel(x, y, Color.argb(160, 0, 230, 230))
-                                coloredPixels++
-                            } else {
-                                maskBitmap.setPixel(x, y, Color.TRANSPARENT)
-                            }
-                        }
-                    }
-
-                    if (coloredPixels > totalPixels * 0.3f) {
-                        println("Maske verworfen! ($coloredPixels Pixel ist zu groß, wahrscheinlich Wand)")
-                        withContext(Dispatchers.Main) { onResult(null) }
-                        maskBitmap.recycle()
-                        return@use
-                    }
-
-                    // Maske auf die Originalgröße (1024) hochskalieren
-                    val scaledMask = Bitmap.createScaledBitmap(maskBitmap, 1024, 1024, true)
-                    maskBitmap.recycle()
-
-               withContext(Dispatchers.Main) {
-                        onResult(scaledMask) // nur transparente Maske zurückgeben
+                    withContext(Dispatchers.Main) {
+                        onResult(resultMask)
                     }
                 }
-
-                coordsTensor.close()
-                labelsTensor.close()
-                origSizeTensor.close()
-                hasMaskTensor.close()
-                dummyMask.close()
+                closeTensors(coordsTensor, labelsTensor, origSizeTensor, hasMaskTensor, dummyMask)
 
             } catch (e: Exception) {
                 e.printStackTrace()
             }
         }
     }
+
+    private fun createCoordsTensor(pointsList: List<TapPoint>, numPoints: Long): OnnxTensor {
+        val pointsArray = FloatArray(pointsList.size * 2)
+        for (i in pointsList.indices) {
+            pointsArray[i * 2] = pointsList[i].normX * 1024f
+            pointsArray[i * 2 + 1] = pointsList[i].normY * 1024f
+        }
+        return OnnxTensor.createTensor(
+            ortEnv,
+            FloatBuffer.wrap(pointsArray),
+            longArrayOf(1, numPoints, 2)
+        )
+    }
+
+    private fun createLabelsTensor(pointsList: List<TapPoint>, numPoints: Long): OnnxTensor {
+        val labelsArray = FloatArray(pointsList.size)
+        for (i in pointsList.indices) {
+            labelsArray[i] = if (pointsList[i].isPositive) 1f else 0f
+        }
+        return OnnxTensor.createTensor(
+            ortEnv,
+            FloatBuffer.wrap(labelsArray),
+            longArrayOf(1, numPoints)
+        )
+    }
+
+    private fun processMaskTensor(masksTensor: OnnxTensor): Bitmap? {
+        val masksFloats = masksTensor.floatBuffer.array()
+        val maskShape = masksTensor.info.shape
+        val maskHeight = maskShape[maskShape.size - 2].toInt()
+        val maskWidth = maskShape[maskShape.size - 1].toInt()
+        val totalPixels = maskWidth * maskHeight
+
+        val pixelsArray = IntArray(totalPixels)
+        var coloredPixels = 0
+        val maskColor = Color.argb(160, 0, 230, 230)
+
+        for (i in 0 until totalPixels) {
+            if (i < masksFloats.size && masksFloats[i] > 0.0f) {
+                pixelsArray[i] = maskColor
+                coloredPixels++
+            } else {
+                pixelsArray[i] = Color.TRANSPARENT
+            }
+        }
+
+
+        // Maske verwerfen
+        if (coloredPixels > totalPixels * 0.3f) {
+            println("Maske verworfen! ($coloredPixels Pixel ist zu groß, wahrscheinlich Wand)")
+            return null
+        }
+        val maskBitmap =
+            Bitmap.createBitmap(pixelsArray, maskWidth, maskHeight, Bitmap.Config.ARGB_8888)
+
+
+        // Maske auf Originalgröße hochskalieren
+        val scaledMask = Bitmap.createScaledBitmap(maskBitmap, 1024, 1024, true)
+        if (scaledMask !== maskBitmap) {
+            maskBitmap.recycle()
+        }
+
+        return scaledMask
+    }
+
+    private fun closeTensors(vararg tensors: OnnxTensor) {
+        for (tensor in tensors) {
+            tensor.close()
+        }
+    }
+
+
 }
