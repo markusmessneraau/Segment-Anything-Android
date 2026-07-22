@@ -33,23 +33,10 @@ class HomeViewModel(private val samRepository: SamRepository) : ViewModel() {
     val baseBitmap: StateFlow<Bitmap?> = _baseBitmap.asStateFlow()
 
     fun onImageSelected(context: Context, uri: Uri?) {
-        _selectedImageUri.value = uri
-        _isImageReady.value = false
-        _holds.value = emptyList()
-        _activeHoldId.value = null
-        _baseBitmap.value = null
-
+        resetState(uri)
         if (uri != null) {
             try {
-                val bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    val source = ImageDecoder.createSource(context.contentResolver, uri)
-                    ImageDecoder.decodeBitmap(source)
-                } else {
-                    @Suppress("DEPRECATION")
-                    MediaStore.Images.Media.getBitmap(context.contentResolver, uri)
-                }
-
-                val argbBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true)
+                val argbBitmap = decodeBitmapFromUri(context, uri)
 
                 // Bild einlesen und Merkmale berechnen
                 samRepository.loadAndPrepare(argbBitmap) {
@@ -66,44 +53,12 @@ class HomeViewModel(private val samRepository: SamRepository) : ViewModel() {
     // Wird aufgerufen, wenn der Nutzer auf das Bild tippt
     fun onTrackTapped(normX: Float, normY: Float) {
         if (!_isImageReady.value) return
+        val clickedHold = findHoldAtPosition(normX, normY)
 
-        // Werte auf Maskengröße (1024x1024) hochrechnen
-        val pixelX = (normX * 1024f).toInt().coerceIn(0, 1023)
-        val pixelY = (normY * 1024f).toInt().coerceIn(0, 1023)
-
-        // in allen fertigen Masken suchen, ob der angeklickte Pixel nicht durchsichtig ist
-        val clickedHold = _holds.value.find { hold ->
-            val bitmap = hold.maskBitmap
-            if (bitmap != null) {
-                val pixelColor = bitmap.getPixel(pixelX, pixelY)
-                android.graphics.Color.alpha(pixelColor) > 0
-            } else {
-                false
-            }
-        }
-
-        // bereits geklickter Griff neu angeklickt
         if (clickedHold != null) {
             _activeHoldId.value = clickedHold.id
         } else {
-            val newPoint = TapPoint(normX, normY, isPositive = true)
-            val newHold = ClimbingHold(points = listOf(newPoint))
-
-            _activeHoldId.value = newHold.id
-            _holds.value += newHold
-
-            samRepository.getHoldMask(newHold.points) { maskBitmap ->
-                if (maskBitmap == null) {
-                    _holds.value = _holds.value.filter { it.id != newHold.id }
-                    _activeHoldId.value = null
-                } else{
-                    val updatedHold = newHold.copy(maskBitmap = maskBitmap)
-                    _holds.value = _holds.value.map { hold ->
-                        if (hold.id == updatedHold.id) updatedHold else hold
-                    }
-                }
-            }
-
+            createNewHold(normX, normY)
         }
     }
 
@@ -115,15 +70,13 @@ class HomeViewModel(private val samRepository: SamRepository) : ViewModel() {
         val currentHold = _holds.value.find { it.id == activeId } ?: return
 
         val negativePoint = TapPoint(normX, normY, isPositive = false)
+        val holdWithNewPoint = currentHold.copy(points = currentHold.points + negativePoint)
 
-        val updatedPoints = currentHold.points + negativePoint
-        val holdWithNewPoint = currentHold.copy(points = updatedPoints)
-
-        _holds.value = _holds.value.map { if (it.id == activeId) holdWithNewPoint else it }
+        updateHoldInList(holdWithNewPoint)
 
         samRepository.getHoldMask(holdWithNewPoint.points) { newMask ->
             val finishedHold = holdWithNewPoint.copy(maskBitmap = newMask)
-            _holds.value = _holds.value.map { if (it.id == activeId) finishedHold else it }
+            updateHoldInList(finishedHold)
         }
     }
 
@@ -133,6 +86,66 @@ class HomeViewModel(private val samRepository: SamRepository) : ViewModel() {
         _holds.value = _holds.value.filter { it.id != idToRemove }
 
         _activeHoldId.value = null
+    }
+
+    private fun resetState(uri: Uri?) {
+        _selectedImageUri.value = uri
+        _isImageReady.value = false
+        _holds.value = emptyList()
+        _activeHoldId.value = null
+        _baseBitmap.value = null
+    }
+
+    private fun decodeBitmapFromUri(context: Context, uri: Uri): Bitmap {
+        val bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val source = ImageDecoder.createSource(context.contentResolver, uri)
+            ImageDecoder.decodeBitmap(source)
+        } else {
+            @Suppress("DEPRECATION")
+            MediaStore.Images.Media.getBitmap(context.contentResolver, uri)
+        }
+        return bitmap.copy(Bitmap.Config.ARGB_8888, true)
+    }
+
+    private fun findHoldAtPosition(normX: Float, normY: Float): ClimbingHold? {
+        val pixelX = (normX * 1024f).toInt().coerceIn(0, 1023)
+        val pixelY = (normY * 1024f).toInt().coerceIn(0, 1023)
+
+        return _holds.value.find { hold ->
+            val bitmap = hold.maskBitmap
+            if (bitmap != null) {
+                val pixelColor = bitmap.getPixel(pixelX, pixelY)
+                android.graphics.Color.alpha(pixelColor) > 0
+            } else {
+                false
+            }
+        }
+    }
+
+    private fun createNewHold(normX: Float, normY: Float) {
+        val newPoint = TapPoint(normX, normY, isPositive = true)
+        val newHold = ClimbingHold(points = listOf(newPoint))
+
+        _activeHoldId.value = newHold.id
+        _holds.value += newHold
+
+        samRepository.getHoldMask(newHold.points) { maskBitmap ->
+            if (maskBitmap == null) {
+                _holds.value = _holds.value.filter { it.id != newHold.id }
+                if (_activeHoldId.value == newHold.id) {
+                    _activeHoldId.value = null
+                }
+            } else {
+                val updatedHold = newHold.copy(maskBitmap = maskBitmap)
+                updateHoldInList(updatedHold)
+            }
+        }
+    }
+
+    private fun updateHoldInList(updatedHold: ClimbingHold) {
+        _holds.value = _holds.value.map { hold ->
+            if (hold.id == updatedHold.id) updatedHold else hold
+        }
     }
 
 }
