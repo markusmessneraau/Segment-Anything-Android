@@ -193,7 +193,7 @@ fun HomeScreen(homeViewModel: HomeViewModel) {
                         Box(
                             modifier = Modifier
                                 .matchParentSize()
-                                .background(Color.Black.copy(alpha = 0.6f))
+                                .background(Color.Black.copy(alpha = 0.7f))
                         )
                     }
 

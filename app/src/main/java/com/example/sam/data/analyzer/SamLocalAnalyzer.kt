@@ -221,6 +221,31 @@ class SamLocalAnalyzer(private val context: Context) {
     }
 
     private fun processMaskTensor(masksTensor: OnnxTensor): Bitmap? {
+
+        // Tensor in Bitmap umwandeln
+        val maskBitmap = createRawMaskBitmap(masksTensor) ?: return null
+
+        // Maske auf Originalgröße hochskalieren
+        val scaledMask = Bitmap.createScaledBitmap(maskBitmap, 1024, 1024, true)
+        if (scaledMask !== maskBitmap) {
+            maskBitmap.recycle()
+        }
+        // Effekte
+        val originalFoto = currentResizedBitmap ?: return scaledMask
+        val finalCroppedBitmap = applyEffects(scaledMask, originalFoto)
+
+        scaledMask.recycle()
+
+        return finalCroppedBitmap
+    }
+
+    private fun closeTensors(vararg tensors: OnnxTensor) {
+        for (tensor in tensors) {
+            tensor.close()
+        }
+    }
+
+    private fun createRawMaskBitmap(masksTensor: OnnxTensor): Bitmap? {
         val masksFloats = masksTensor.floatBuffer.array()
         val maskShape = masksTensor.info.shape
         val maskHeight = maskShape[maskShape.size - 2].toInt()
@@ -240,54 +265,43 @@ class SamLocalAnalyzer(private val context: Context) {
             }
         }
 
-
-        // Maske verwerfen
+        // Maske verwerfen wenn Wand
         if (coloredPixels > totalPixels * 0.3f) {
-            println("Maske verworfen! ($coloredPixels Pixel ist zu groß, wahrscheinlich Wand)")
+            println("Maske verworfen! ($coloredPixels Pixel ist zu groß)")
             return null
         }
-        val maskBitmap =
-            Bitmap.createBitmap(pixelsArray, maskWidth, maskHeight, Bitmap.Config.ARGB_8888)
 
+        return Bitmap.createBitmap(pixelsArray, maskWidth, maskHeight, Bitmap.Config.ARGB_8888)
+    }
 
-        // Maske auf Originalgröße hochskalieren
-        val scaledMask = Bitmap.createScaledBitmap(maskBitmap, 1024, 1024, true)
-        if (scaledMask !== maskBitmap) {
-            maskBitmap.recycle()
-        }
+    private fun applyEffects(scaledMask: Bitmap, originalFoto: Bitmap): Bitmap {
         val finalCroppedBitmap = Bitmap.createBitmap(1024, 1024, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(finalCroppedBitmap)
         val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG or android.graphics.Paint.FILTER_BITMAP_FLAG)
 
+        // Schablone mit weichen Kanten zeichnen
         paint.maskFilter = android.graphics.BlurMaskFilter(2f, android.graphics.BlurMaskFilter.Blur.NORMAL)
         canvas.drawBitmap(scaledMask, 0f, 0f, paint)
 
+        // Originalfoto einfügen
         paint.maskFilter = null
         paint.xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.SRC_IN)
-        currentResizedBitmap?.let { originalFoto ->
-            canvas.drawBitmap(originalFoto, 0f, 0f, paint)
-        }
+        canvas.drawBitmap(originalFoto, 0f, 0f, paint)
+
+        // Glow berechnen und dahinter legen
         val alphaMask = scaledMask.extractAlpha()
         val outlinePaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.WHITE
-            maskFilter =
-                android.graphics.BlurMaskFilter(4f, android.graphics.BlurMaskFilter.Blur.SOLID)
-            xfermode =
-                android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.DST_OVER)
+            color = Color.WHITE
+            maskFilter = android.graphics.BlurMaskFilter(4f, android.graphics.BlurMaskFilter.Blur.SOLID)
+            xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.DST_OVER)
         }
         canvas.drawBitmap(alphaMask, 0f, 0f, outlinePaint)
 
-        scaledMask.recycle()
         alphaMask.recycle()
 
         return finalCroppedBitmap
     }
 
-    private fun closeTensors(vararg tensors: OnnxTensor) {
-        for (tensor in tensors) {
-            tensor.close()
-        }
-    }
 
 
 }
