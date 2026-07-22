@@ -93,9 +93,14 @@ class HomeViewModel(private val samRepository: SamRepository) : ViewModel() {
             _holds.value += newHold
 
             samRepository.getHoldMask(newHold.points) { maskBitmap ->
-                val updatedHold = newHold.copy(maskBitmap = maskBitmap)
-                _holds.value = _holds.value.map { hold ->
-                    if (hold.id == updatedHold.id) updatedHold else hold
+                if (maskBitmap == null) {
+                    _holds.value = _holds.value.filter { it.id != newHold.id }
+                    _activeHoldId.value = null
+                } else{
+                    val updatedHold = newHold.copy(maskBitmap = maskBitmap)
+                    _holds.value = _holds.value.map { hold ->
+                        if (hold.id == updatedHold.id) updatedHold else hold
+                    }
                 }
             }
 

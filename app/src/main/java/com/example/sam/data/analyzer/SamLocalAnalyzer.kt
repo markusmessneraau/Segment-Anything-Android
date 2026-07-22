@@ -118,7 +118,7 @@ class SamLocalAnalyzer(private val context: Context) {
     }
 
     //Bei jedem Fingertipp die Maske berechnen (Decoder)
-    fun segmentHold(pointsList: List<TapPoint>, onResult: (Bitmap) -> Unit) {
+    fun segmentHold(pointsList: List<TapPoint>, onResult: (Bitmap?) -> Unit) {
         val embed = imageEmbed ?: return
         val feat0 = highResFeats0 ?: return
         val feat1 = highResFeats1 ?: return
@@ -164,15 +164,26 @@ class SamLocalAnalyzer(private val context: Context) {
 
                     val maskBitmap = Bitmap.createBitmap(maskWidth, maskHeight, Bitmap.Config.ARGB_8888)
 
+                    var coloredPixels = 0
+                    val totalPixels = maskWidth * maskHeight
+
                     for (y in 0 until maskHeight) {
                         for (x in 0 until maskWidth) {
                             val index = y * maskWidth + x
                             if (index < masksFloats.size && masksFloats[index] > 0.0f) {
                                 maskBitmap.setPixel(x, y, Color.argb(160, 0, 230, 230))
+                                coloredPixels++
                             } else {
                                 maskBitmap.setPixel(x, y, Color.TRANSPARENT)
                             }
                         }
+                    }
+
+                    if (coloredPixels > totalPixels * 0.3f) {
+                        println("Maske verworfen! ($coloredPixels Pixel ist zu groß, wahrscheinlich Wand)")
+                        withContext(Dispatchers.Main) { onResult(null) }
+                        maskBitmap.recycle()
+                        return@use
                     }
 
                     // Maske auf die Originalgröße (1024) hochskalieren

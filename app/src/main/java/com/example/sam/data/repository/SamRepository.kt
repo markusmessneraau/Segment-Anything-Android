@@ -10,7 +10,7 @@ class SamRepository(private val samAnalyzer: SamLocalAnalyzer) {
         samAnalyzer.prepareImage(bitmap, onReady)
     }
 
-    fun getHoldMask(points: List<TapPoint>, onResult: (Bitmap) -> Unit) {
+    fun getHoldMask(points: List<TapPoint>, onResult: (Bitmap?) -> Unit) {
         samAnalyzer.segmentHold(points, onResult)
     }
 }
