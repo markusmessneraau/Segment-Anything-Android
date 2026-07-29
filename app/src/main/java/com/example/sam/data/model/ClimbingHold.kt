@@ -12,6 +12,6 @@ data class TapPoint(
 data class ClimbingHold(
     val id: String = UUID.randomUUID().toString(),
     val points: List<TapPoint> = emptyList(),
-    val maskBitmap: Bitmap? = null
+    val holdData: ProcessedHoldData? = null
 )
 

@@ -85,8 +85,8 @@ class HomeViewModel(private val samRepository: SamRepository) : ViewModel() {
 
         updateHoldInList(holdWithNewPoint)
 
-        samRepository.getHoldMask(holdWithNewPoint.points) { newMask ->
-            val finishedHold = holdWithNewPoint.copy(maskBitmap = newMask)
+        samRepository.getHoldMask(holdWithNewPoint.points) { newHoldData ->
+            val finishedHold = holdWithNewPoint.copy(holdData = newHoldData)
             updateHoldInList(finishedHold)
         }
     }
@@ -135,10 +135,16 @@ class HomeViewModel(private val samRepository: SamRepository) : ViewModel() {
         val pixelY = (normY * 1024f).toInt().coerceIn(0, 1023)
 
         return _holds.value.find { hold ->
-            val bitmap = hold.maskBitmap
-            if (bitmap != null) {
-                val pixelColor = bitmap.getPixel(pixelX, pixelY)
-                android.graphics.Color.alpha(pixelColor) > 0
+            val data = hold.holdData
+            if (data != null) {
+
+                // höhe & Breite von ausgeschnittenem Griff auslesen
+                val options = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                android.graphics.BitmapFactory.decodeByteArray(data.imageBlob, 0, data.imageBlob.size, options)
+
+                // liegt Klick innerhalb von Bild?
+                pixelX >= data.xOffset && pixelX <= (data.xOffset + options.outWidth) &&
+                        pixelY >= data.yOffset && pixelY <= (data.yOffset + options.outHeight)
             } else {
                 false
             }
@@ -152,14 +158,14 @@ class HomeViewModel(private val samRepository: SamRepository) : ViewModel() {
         _activeHoldId.value = newHold.id
         _holds.value += newHold
 
-        samRepository.getHoldMask(newHold.points) { maskBitmap ->
-            if (maskBitmap == null) {
+        samRepository.getHoldMask(newHold.points) { holdData ->
+            if (holdData == null) {
                 _holds.value = _holds.value.filter { it.id != newHold.id }
                 if (_activeHoldId.value == newHold.id) {
                     _activeHoldId.value = null
                 }
             } else {
-                val updatedHold = newHold.copy(maskBitmap = maskBitmap)
+                val updatedHold = newHold.copy(holdData = holdData)
                 updateHoldInList(updatedHold)
             }
         }

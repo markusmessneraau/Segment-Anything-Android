@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.platform.LocalDensity
 
 @Composable
 fun HomeScreen(homeViewModel: HomeViewModel) {
@@ -197,9 +198,12 @@ fun HomeScreen(homeViewModel: HomeViewModel) {
                         )
                     }
 
+                    val density = LocalDensity.current
+
                     // darüber alle Griffmasken
                     holds.forEach { hold ->
-                        if (hold.maskBitmap != null) {
+                        val data = hold.holdData
+                        if (data != null) {
 
                             val isActive = hold.id == activeHoldId
 
@@ -214,12 +218,35 @@ fun HomeScreen(homeViewModel: HomeViewModel) {
                                 )
                             }
 
+                            val decodedBitmap = remember(data) {
+                                android.graphics.BitmapFactory.decodeByteArray(
+                                    data.imageBlob, 0, data.imageBlob.size
+                                ).asImageBitmap()
+                            }
+
+                            val ratioX = size.width / 1024f
+                            val ratioY = size.height / 1024f
+
+
 
                             Image(
-                                bitmap = hold.maskBitmap.asImageBitmap(),
+                                bitmap = decodedBitmap,
                                 contentDescription = "Maske",
-                                modifier = Modifier.fillMaxSize(),
-                                colorFilter = colorFilter
+                                colorFilter = colorFilter,
+                                contentScale = androidx.compose.ui.layout.ContentScale.FillBounds,
+                                modifier = Modifier
+                                    // Schiebt Bild an X/Y Position
+                                    .offset {
+                                        androidx.compose.ui.unit.IntOffset(
+                                            x = (data.xOffset * ratioX).toInt(),
+                                            y = (data.yOffset * ratioY).toInt()
+                                        )
+                                    }
+                                    // Gibt Bild berechnete Größe in dp
+                                    .size(
+                                        width = with(density) { (decodedBitmap.width * ratioX).toDp() },
+                                        height = with(density) { (decodedBitmap.height * ratioY).toDp() }
+                                    )
                             )
                         }
                     }

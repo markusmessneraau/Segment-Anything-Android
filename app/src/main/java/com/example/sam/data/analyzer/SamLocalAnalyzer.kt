@@ -7,11 +7,14 @@ import ai.onnxruntime.OnnxTensor
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import android.os.Build
+import com.example.sam.data.model.ProcessedHoldData
 import com.example.sam.data.model.TapPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.FloatBuffer
@@ -138,7 +141,7 @@ class SamLocalAnalyzer(private val context: Context) {
     }
 
     //Bei jedem Tipp Maske berechnen
-    fun segmentHold(pointsList: List<TapPoint>, onResult: (Bitmap?) -> Unit) {
+    fun segmentHold(pointsList: List<TapPoint>, onResult: (ProcessedHoldData?) -> Unit) {
         val embed = imageEmbed ?: return
         val feat0 = highResFeats0 ?: return
         val feat1 = highResFeats1 ?: return
@@ -220,7 +223,7 @@ class SamLocalAnalyzer(private val context: Context) {
         )
     }
 
-    private fun processMaskTensor(masksTensor: OnnxTensor): Bitmap? {
+    private fun processMaskTensor(masksTensor: OnnxTensor): ProcessedHoldData? {
 
         // Tensor in Bitmap umwandeln
         val maskBitmap = createRawMaskBitmap(masksTensor) ?: return null
@@ -231,12 +234,16 @@ class SamLocalAnalyzer(private val context: Context) {
             maskBitmap.recycle()
         }
         // Effekte
-        val originalFoto = currentResizedBitmap ?: return scaledMask
+        val originalFoto = currentResizedBitmap ?: return null
         val finalCroppedBitmap = applyEffects(scaledMask, originalFoto)
 
         scaledMask.recycle()
 
-        return finalCroppedBitmap
+        val holdPackage = prepareHoldForBackend(finalCroppedBitmap)
+
+        finalCroppedBitmap.recycle()
+
+        return holdPackage
     }
 
     private fun closeTensors(vararg tensors: OnnxTensor) {
@@ -300,6 +307,60 @@ class SamLocalAnalyzer(private val context: Context) {
         alphaMask.recycle()
 
         return finalCroppedBitmap
+    }
+
+
+    private fun prepareHoldForBackend(fullSizeBitmap: Bitmap): ProcessedHoldData?{
+        val width = fullSizeBitmap.width
+        val height = fullSizeBitmap.height
+
+        var minX = width
+        var minY = height
+        var maxX = -1
+        var maxY = -1
+
+        // Bounding Box berechnen
+        val pixels = IntArray(width * height)
+        fullSizeBitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+
+        for(y in 0 until height){
+            for(x in 0 until width){
+                val alpha = Color.alpha(pixels[y*width + x])
+                // farbiger Pixel gefunden
+                if(alpha > 0){
+                    if (x < minX) minX = x
+                    if (x > maxX) maxX = x
+                    if (y < minY) minY = y
+                    if (y > maxY) maxY = y
+                }
+            }
+        }
+
+        // Bild ist leer
+        if (maxX < minX || maxY < minY) return null
+
+        // Hold ausschneiden
+        val cropWidth = maxX - minX + 1
+        val cropHeight = maxY - minY + 1
+        val croppedBitmap = Bitmap.createBitmap(fullSizeBitmap, minX, minY, cropWidth, cropHeight)
+
+        // Bild in webP-Byte Array umwandeln
+        val outputStream = ByteArrayOutputStream()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            croppedBitmap.compress(Bitmap.CompressFormat.WEBP_LOSSY, 80, outputStream)
+        } else {
+            @Suppress("DEPRECATION")
+            croppedBitmap.compress(Bitmap.CompressFormat.WEBP, 80, outputStream)
+        }
+
+        val imageBlob = outputStream.toByteArray()
+
+        return ProcessedHoldData(
+            xOffset = minX,
+            yOffset = minY,
+            imageBlob = imageBlob
+        )
+
     }
 
 
