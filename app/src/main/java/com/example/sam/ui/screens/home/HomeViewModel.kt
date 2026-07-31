@@ -7,12 +7,19 @@ import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.example.sam.data.repository.SamRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import com.example.sam.data.model.ClimbingHold
 import com.example.sam.data.model.TapPoint
+import kotlinx.coroutines.launch
+import com.example.sam.network.RetrofitClient
+import com.example.sam.network.dto.BoulderDto
+import com.example.sam.network.dto.HoldDto
+import android.util.Base64
+
 
 
 class HomeViewModel(private val samRepository: SamRepository) : ViewModel() {
@@ -174,6 +181,44 @@ class HomeViewModel(private val samRepository: SamRepository) : ViewModel() {
     private fun updateHoldInList(updatedHold: ClimbingHold) {
         _holds.value = _holds.value.map { hold ->
             if (hold.id == updatedHold.id) updatedHold else hold
+        }
+    }
+
+    fun uploadBoulder(boulderName: String, boulderGrade: String, onSuccess: () -> Unit, onError: () -> Unit){
+        viewModelScope.launch {
+            try{
+                val holdDtos = _holds.value.mapNotNull { hold ->
+                    val data = hold.holdData ?: return@mapNotNull null
+
+                    val base64Image = Base64.encodeToString(data.imageBlob, Base64.NO_WRAP)
+
+                    HoldDto(
+                        xOffset = data.xOffset,
+                        yOffset = data.yOffset,
+                        imageBlob = base64Image,
+                        holdType = "NORMAL"
+                    )
+                }
+
+                val boulderDto = BoulderDto(
+                    name = boulderName,
+                    grade = boulderGrade,
+                    holds = holdDtos
+                )
+
+                RetrofitClient.apiService.saveRoute(boulderDto)
+
+                println("Boulder wurde an Server geschickt!")
+                onSuccess()
+
+                _holds.value = emptyList()
+                _isRouteFinished.value = false
+
+            } catch (e: Exception){
+                println("FEHLER: Konnte nicht gesendet werden!")
+                e.printStackTrace()
+                onError()
+            }
         }
     }
 
