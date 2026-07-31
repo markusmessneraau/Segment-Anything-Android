@@ -12,10 +12,12 @@ import com.example.sam.data.analyzer.SamLocalAnalyzer
 import com.example.sam.data.repository.SamRepository
 import com.example.sam.navigation.SetupNavGraph // Import für den NavGraph
 import com.example.sam.ui.screens.home.HomeViewModel
+import androidx.activity.enableEdgeToEdge
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
 
         val samAnalyzer = SamLocalAnalyzer(applicationContext)
         val samRepository = SamRepository(samAnalyzer)

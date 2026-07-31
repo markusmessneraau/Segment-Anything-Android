@@ -35,8 +35,6 @@ fun HomeScreen(homeViewModel: HomeViewModel) {
     var isProcessing by remember { mutableStateOf(false) }
 
     var showSaveDialog by remember { mutableStateOf(false) }
-    var routeName by remember { mutableStateOf("") }
-    var routeGrade by remember { mutableStateOf("") }
 
     // aktuellen Zoom merknen
     var scale by remember { mutableFloatStateOf(1f) }
@@ -75,6 +73,7 @@ fun HomeScreen(homeViewModel: HomeViewModel) {
                     colors = listOf(Color(0xFFF8F9FA), Color(0xFFE2E8F0))
                 )
             )
+            .statusBarsPadding()
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
