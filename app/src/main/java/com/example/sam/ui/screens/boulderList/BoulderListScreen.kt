@@ -11,6 +11,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -21,19 +23,16 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.example.sam.network.dto.BoulderListDto
 import com.example.sam.ui.AppTopBar
-
-val dummyBoulders = listOf(
-    BoulderListDto("1", "Boulder 1", "6b"),
-    BoulderListDto("2", "Boulder 2", "7a"),
-    BoulderListDto("3", "Boulder 3", "4c"),
-    BoulderListDto("4", "Boulder 4", "6c+"),
-    BoulderListDto("5", "Boulder 5", "8a"),
-    BoulderListDto("6", "Boulder 6", "5b")
-)
+import androidx.compose.material3.CircularProgressIndicator
 
 @Composable
-fun BoulderListScreen() {
+fun BoulderListScreen(
+    navController: NavController,
+    viewModel: BoulderListViewModel
+) {
 
+    val boulders by viewModel.boulders.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -42,17 +41,27 @@ fun BoulderListScreen() {
                     colors = listOf(Color(0xFFE2E8F0), Color(0xFFCBD5E1))
                 )
             )
+            .statusBarsPadding()
             .padding(20.dp)
     ) {
         AppTopBar()
 
-        //Todo: Boulder aus DB laden
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            contentPadding = PaddingValues(bottom = 24.dp)
-        ) {
-            items(dummyBoulders) { boulder ->
-                BoulderCard(boulder = boulder)
+        if (isLoading) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = Color(0xFF374151))
+            }
+        } else if (boulders.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(text = "Noch keine Boulder vorhanden.", color = Color.Gray)
+            }
+        } else {
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                contentPadding = PaddingValues(bottom = 24.dp)
+            ) {
+                items(boulders) { boulder ->
+                    BoulderCard(boulder = boulder)
+                }
             }
         }
     }

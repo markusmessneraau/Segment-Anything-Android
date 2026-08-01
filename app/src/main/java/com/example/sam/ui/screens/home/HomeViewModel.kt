@@ -16,7 +16,7 @@ import com.example.sam.data.model.ClimbingHold
 import com.example.sam.data.model.TapPoint
 import kotlinx.coroutines.launch
 import com.example.sam.network.RetrofitClient
-import com.example.sam.network.dto.BoulderDto
+import com.example.sam.network.dto.BoulderCreateDto
 import com.example.sam.network.dto.HoldDto
 import android.util.Base64
 
@@ -200,7 +200,7 @@ class HomeViewModel(private val samRepository: SamRepository) : ViewModel() {
                     )
                 }
 
-                val boulderDto = BoulderDto(
+                val boulderDto = BoulderCreateDto(
                     name = boulderName,
                     grade = boulderGrade,
                     holds = holdDtos
@@ -216,6 +216,7 @@ class HomeViewModel(private val samRepository: SamRepository) : ViewModel() {
 
             } catch (e: Exception){
                 println("FEHLER: Konnte nicht gesendet werden!")
+                println("GRUND: ${e.message}")
                 e.printStackTrace()
                 onError()
             }

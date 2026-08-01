@@ -4,11 +4,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import com.example.sam.ui.AppBottomBar
 import com.example.sam.ui.screens.boulderList.BoulderListScreen
+import com.example.sam.ui.screens.boulderList.BoulderListViewModel
 import com.example.sam.ui.screens.home.HomeScreen
 import com.example.sam.ui.screens.home.HomeViewModel
 
@@ -35,7 +37,10 @@ fun SetupNavGraph(
                 HomeScreen(homeViewModel = homeViewModel)
             }
             composable(route = Screen.List.route) {
-                BoulderListScreen()
+                BoulderListScreen(
+                    navController = navController,
+                    viewModel = viewModel ()
+                )
             }
         }
     }
