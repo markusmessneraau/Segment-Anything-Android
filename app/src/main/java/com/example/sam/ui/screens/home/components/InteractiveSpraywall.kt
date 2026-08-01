@@ -50,11 +50,27 @@ fun InteractiveSpraywall(
 
     val appTurquoise = Color(0xFF374151)
 
+    val currentScale by rememberUpdatedState(scale)
+    val currentOffsetX by rememberUpdatedState(offsetX)
+    val currentOffsetY by rememberUpdatedState(offsetY)
+    val currentSize by rememberUpdatedState(size)
+
+    val getNormalizedCoordinates = { tapOffset: androidx.compose.ui.geometry.Offset ->
+        val centerX = currentSize.width / 2f
+        val centerY = currentSize.height / 2f
+        val originalX = centerX + (tapOffset.x - currentOffsetX - centerX) / currentScale
+        val originalY = centerY + (tapOffset.y - currentOffsetY - centerY) / currentScale
+        Pair(
+            originalX / currentSize.width.toFloat(),
+            originalY / currentSize.height.toFloat()
+        )
+    }
+
     Box(
         modifier = Modifier
             .aspectRatio(1f)
             .fillMaxWidth()
-            .shadow(elevation = 12.dp, shape = RoundedCornerShape(20.dp))
+            .shadow(elevation = 12.dp, shape = RoundedCornerShape(16.dp))
             .background(Color.White)
             .clip(RoundedCornerShape(16.dp))
             .background(Color.LightGray.copy(alpha = 0.2f))
@@ -62,12 +78,12 @@ fun InteractiveSpraywall(
             .pointerInput(isImageReady, isRouteFinished) {
                 if (isImageReady && !isRouteFinished) {
                     detectTransformGestures { _, pan, zoom, _ ->
-                        val newScale = (scale * zoom).coerceIn(1f, 5f)
+                        val newScale = (currentScale * zoom).coerceIn(1f, 5f)
                         onScaleChange(newScale)
 
-                        val maxOffset = (newScale - 1) * size.width / 2
-                        onOffsetChangeX((offsetX + pan.x * newScale).coerceIn(-maxOffset, maxOffset))
-                        onOffsetChangeY((offsetY + pan.y * newScale).coerceIn(-maxOffset, maxOffset))
+                        val maxOffset = (newScale - 1) * currentSize.width / 2
+                        onOffsetChangeX((currentOffsetX + pan.x).coerceIn(-maxOffset, maxOffset))
+                        onOffsetChangeY((currentOffsetY + pan.y).coerceIn(-maxOffset, maxOffset))
                     }
                 }
             }
@@ -75,25 +91,13 @@ fun InteractiveSpraywall(
                 if (isImageReady && !isRouteFinished) {
                     detectTapGestures(
                         onTap = { tapOffset ->
-                            val centerX = size.width / 2f
-                            val centerY = size.height / 2f
-                            val originalX = centerX + (tapOffset.x - offsetX - centerX) / scale
-                            val originalY = centerY + (tapOffset.y - offsetY - centerY) / scale
-                            val normX = originalX / size.width.toFloat()
-                            val normY = originalY / size.height.toFloat()
-
+                            val (normX, normY) = getNormalizedCoordinates(tapOffset)
                             if (normX in 0f..1f && normY in 0f..1f) {
                                 homeViewModel.onTrackTapped(normX, normY)
                             }
                         },
                         onLongPress = { tapOffset ->
-                            val centerX = size.width / 2f
-                            val centerY = size.height / 2f
-                            val originalX = centerX + (tapOffset.x - offsetX - centerX) / scale
-                            val originalY = centerY + (tapOffset.y - offsetY - centerY) / scale
-                            val normX = originalX / size.width.toFloat()
-                            val normY = originalY / size.height.toFloat()
-
+                            val (normX, normY) = getNormalizedCoordinates(tapOffset)
                             if (normX in 0f..1f && normY in 0f..1f) {
                                 homeViewModel.onTrackLongPressed(normX, normY)
                             }
