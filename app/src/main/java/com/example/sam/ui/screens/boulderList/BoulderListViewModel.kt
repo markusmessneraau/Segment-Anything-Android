@@ -16,13 +16,20 @@ class BoulderListViewModel : ViewModel() {
     private val _isLoading = MutableStateFlow(true)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
+
     init {
         fetchBoulders()
     }
 
-    fun fetchBoulders() {
+    fun fetchBoulders(isRefresh: Boolean = false) {
         viewModelScope.launch {
-            _isLoading.value = true
+            if (isRefresh) {
+                _isRefreshing.value = true
+            } else {
+                _isLoading.value = true
+            }
             try {
                 val fetchedBoulders = RetrofitClient.apiService.getAllBoulders()
                 _boulders.value = fetchedBoulders
@@ -31,6 +38,7 @@ class BoulderListViewModel : ViewModel() {
                 println(e.message)
             } finally {
                 _isLoading.value = false
+                _isRefreshing.value = false
             }
         }
     }

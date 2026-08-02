@@ -5,8 +5,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Text
@@ -24,7 +26,12 @@ import androidx.navigation.NavController
 import com.example.sam.network.dto.BoulderListDto
 import com.example.sam.ui.AppTopBar
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.ExperimentalMaterial3Api
 
+import com.example.sam.navigation.Screen
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BoulderListScreen(
     navController: NavController,
@@ -33,6 +40,8 @@ fun BoulderListScreen(
 
     val boulders by viewModel.boulders.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val isRefreshing by viewModel.isRefreshing.collectAsState()
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -46,21 +55,42 @@ fun BoulderListScreen(
     ) {
         AppTopBar()
 
-        if (isLoading) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Color(0xFF374151))
-            }
-        } else if (boulders.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(text = "Noch keine Boulder vorhanden.", color = Color.Gray)
-            }
-        } else {
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                contentPadding = PaddingValues(bottom = 24.dp)
-            ) {
-                items(boulders) { boulder ->
-                    BoulderCard(boulder = boulder)
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = { viewModel.fetchBoulders(isRefresh = true) },
+            modifier = Modifier.fillMaxSize()
+        ) {
+            when {
+                isLoading && !isRefreshing -> {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = Color(0xFF374151))
+                    }
+                }
+                boulders.isEmpty() -> {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState()), // scrollbar für pull-to-refresh
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(text = "Noch keine Boulder vorhanden.", color = Color.Gray)
+                    }
+                }
+                else -> {
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        contentPadding = PaddingValues(bottom = 24.dp),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        items(boulders) { boulder ->
+                            BoulderCard(
+                                boulder = boulder,
+                                onClick = {
+                                    navController.navigate(Screen.BoulderDetail.createRoute(boulder.id))
+                                }
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -68,17 +98,17 @@ fun BoulderListScreen(
 }
 
 @Composable
-fun BoulderCard(boulder: BoulderListDto) {
+fun BoulderCard(
+    boulder: BoulderListDto,
+    onClick: () -> Unit
+) {
     val appTurquoise = Color(0xFF374151)
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .height(80.dp)
-            .clickable {
-                // TODO ViewBoulderscreen anzeigen mit angeklicktem Boulder
-                println("User hat auf Route ${boulder.name} (ID: ${boulder.id}) geklickt!")
-            },
+            .clickable { onClick() },
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)

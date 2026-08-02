@@ -22,6 +22,8 @@ import android.util.Base64
 
 
 
+import com.example.sam.util.cropToSquareCenter
+
 class HomeViewModel(private val samRepository: SamRepository) : ViewModel() {
 
     private val _selectedImageUri = MutableStateFlow<Uri?>(null)
@@ -30,7 +32,6 @@ class HomeViewModel(private val samRepository: SamRepository) : ViewModel() {
     private val _isImageReady = MutableStateFlow(false)
     val isImageReady: StateFlow<Boolean> = _isImageReady.asStateFlow()
 
-    // speichert alle Griffe einer Spraywall
     private val _holds = MutableStateFlow<List<ClimbingHold>>(emptyList())
     val holds: StateFlow<List<ClimbingHold>> = _holds.asStateFlow()
     private val _activeHoldId = MutableStateFlow<String?>(null)
@@ -56,7 +57,6 @@ class HomeViewModel(private val samRepository: SamRepository) : ViewModel() {
             try {
                 val argbBitmap = decodeBitmapFromUri(context, uri)
 
-                // Bild einlesen und Merkmale berechnen
                 samRepository.loadAndPrepare(argbBitmap) {
                     _isImageReady.value = true
                     _baseBitmap.value = argbBitmap
@@ -68,7 +68,6 @@ class HomeViewModel(private val samRepository: SamRepository) : ViewModel() {
         }
     }
 
-    // Wird aufgerufen, wenn der Nutzer auf das Bild tippt
     fun onTrackTapped(normX: Float, normY: Float) {
         if (!_isImageReady.value) return
         val clickedHold = findHoldAtPosition(normX, normY)
@@ -124,12 +123,7 @@ class HomeViewModel(private val samRepository: SamRepository) : ViewModel() {
         }
         val softwareBitmap = originalBitmap.copy(Bitmap.Config.ARGB_8888, true)
 
-        // auf Quadrat zuschneiden
-        val size = Math.min(softwareBitmap.width, softwareBitmap.height)
-        val xOffset = (softwareBitmap.width - size) / 2
-        val yOffset = (softwareBitmap.height - size) / 2
-
-        val squareBitmap = Bitmap.createBitmap(softwareBitmap, xOffset, yOffset, size, size)
+        val squareBitmap = cropToSquareCenter(softwareBitmap)
 
         if (softwareBitmap != squareBitmap) {
             softwareBitmap.recycle()
